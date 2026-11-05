@@ -385,6 +385,7 @@ const app = {
       throw new Error(m);
     } finally { clearTimeout(t); if (!opt.silent) $('busy').classList.add('hidden'); }
   },
+  showBusy(on) { $('busy').classList.toggle('hidden', !on); }, // 全選模式（逐個細組別呼叫）時手動控制同步畫面
 
   // ----- 點名 -----
   async loadList(btn) {
@@ -396,12 +397,16 @@ const app = {
         // 全選：逐個細組別查詢，合併；每個運動員記住 _team 以便提交時分組
         const e = (this.s.groups || []).find(x => x.g === big);
         if (!e || !e.subs.length) { this.clear(); return alert('此大組別未有細組別。'); }
-        const results = await Promise.all(e.subs.map(async s => {
-          try {
-            const r = await this.api('getAthletes', { team: big + '/' + s, date, fresh: btn === true }, { silent: true });
-            return { sub: s, r };
-          } catch (err) { return { sub: s, error: err.message }; }
-        }));
+        this.showBusy(true);
+        let results;
+        try {
+          results = await Promise.all(e.subs.map(async s => {
+            try {
+              const r = await this.api('getAthletes', { team: big + '/' + s, date, fresh: btn === true }, { silent: true });
+              return { sub: s, r };
+            } catch (err) { return { sub: s, error: err.message }; }
+          }));
+        } finally { this.showBusy(false); }
         const allAthletes = [], allSaved = {};
         let def = '缺席'; const errs = [];
         results.forEach(x => {
@@ -430,7 +435,7 @@ const app = {
         this.noteUpdate(n, date, team);
         this.s.loaded = { team, date }; this.s.filterOpen = false; this.s.dirty = false; this.render(); ['att-stats', 'att-submit'].forEach(i => $(i).classList.remove('hidden'));
       }
-    } catch (e) { this.clear(); alert('錯誤：' + e.message); }
+    } catch (e) { this.showBusy(false); this.clear(); alert('錯誤：' + e.message); }
   },
   noteUpdate(n, date, team) {
     const note = $('att-note'); note.classList.toggle('hidden', !n);
@@ -554,6 +559,7 @@ const app = {
       const teamNames = Object.keys(groups);
       if (!confirm(`確認提交以下組別的點名？\n${teamNames.join('\n')}\n共 ${target.length} 人。`)) return;
       this.s.busy = true; const btn = $('submit-btn'); btn.disabled = true; btn.textContent = '⏳ 提交中…（請勿關閉頁面）';
+      this.showBusy(true);
       try {
         const results = [];
         for (const t of teamNames) {
@@ -572,10 +578,10 @@ const app = {
           this.s.dirty = this.s.athletes.some(a => this.s.orig[a.AthleteID] !== undefined && this.s.att[a.AthleteID] !== this.s.orig[a.AthleteID]);
           this.noteUpdate(1, date, L0.team);
         }
-        this.s.busy = false; btn.disabled = false; if (this.s.athletes.length) this.render();
+        this.s.busy = false; this.showBusy(false); btn.disabled = false; if (this.s.athletes.length) this.render();
         alert('✅ 提交完成\n' + results.join('\n'));
       } catch (e) {
-        this.s.busy = false; btn.disabled = false; if (this.s.athletes.length) this.render();
+        this.s.busy = false; this.showBusy(false); btn.disabled = false; if (this.s.athletes.length) this.render();
         alert('❌ 提交失敗，資料未確認儲存（修改已保留，可再按提交）：\n' + e.message);
       }
       return;
@@ -611,13 +617,16 @@ const app = {
       if ($('att-sub').value === ALL_SUB && L.team === $('att-big').value) {
         const e = (this.s.groups || []).find(x => x.g === L.team);
         if (!e) return;
+        this.showBusy(true);
         const results = [];
-        for (const s of e.subs) {
-          try {
-            const r = await this.api('clearSession', { team: L.team + '/' + s, date: L.date }, { silent: true });
-            results.push(s + '：' + r.message);
-          } catch (err) { results.push(s + '：' + err.message); }
-        }
+        try {
+          for (const s of e.subs) {
+            try {
+              const r = await this.api('clearSession', { team: L.team + '/' + s, date: L.date }, { silent: true });
+              results.push(s + '：' + r.message);
+            } catch (err) { results.push(s + '：' + err.message); }
+          }
+        } finally { this.showBusy(false); }
         this.s.dirty = false; await this.loadList(true);
         alert('✅ 清除完成\n' + results.join('\n'));
         return;
@@ -625,7 +634,7 @@ const app = {
       const r = await this.api('clearSession', { team: L.team, date: L.date });
       this.s.dirty = false; await this.loadList(true);
       alert('✅ ' + r.message);
-    } catch (e) { alert('❌ 清除失敗：\n' + e.message); }
+    } catch (e) { this.showBusy(false); alert('❌ 清除失敗：\n' + e.message); }
   },
   onSel() {
     const big = $('att-big').value, sub = $('att-sub').value;
@@ -804,12 +813,16 @@ const app = {
       if (sub === ALL_SUB) {
         const e = (this.s.groups || []).find(x => x.g === big);
         if (!e) return;
-        const results = await Promise.all(e.subs.map(async s => {
-          try {
-            const r = await this.api('getAthletes', { team: big + '/' + s, date: this.today() }, { silent: true });
-            return r.athletes.map(a => Object.assign({}, a, { _team: big + '/' + s }));
-          } catch (_) { return []; }
-        }));
+        this.showBusy(true);
+        let results;
+        try {
+          results = await Promise.all(e.subs.map(async s => {
+            try {
+              const r = await this.api('getAthletes', { team: big + '/' + s, date: this.today() }, { silent: true });
+              return r.athletes.map(a => Object.assign({}, a, { _team: big + '/' + s }));
+            } catch (_) { return []; }
+          }));
+        } finally { this.showBusy(false); }
         athletes = results.flat();
       } else {
         const r = await this.api('getAthletes', { team: big + '/' + sub, date: this.today() }, { silent: true });
@@ -819,7 +832,7 @@ const app = {
         const subLabel = a._team ? a._team.split('/').slice(1).join('/') : '';
         return `<option value="${esc(a.AthleteID)}">${esc(a.Name)}${a.Age ? '（' + esc(a.Age) + '）' : ''}${subLabel ? ' - ' + esc(subLabel) : ''}</option>`;
       }).join('');
-    } catch (e) { alert('錯誤：' + e.message); }
+    } catch (e) { this.showBusy(false); alert('錯誤：' + e.message); }
   },
   async delAthlete() {
     const id = $('da-ath').value; if (!id) return alert('請先選擇組別及運動員');
