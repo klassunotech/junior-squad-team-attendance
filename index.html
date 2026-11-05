@@ -29,7 +29,9 @@
     <h1 class="text-2xl font-bold mb-2 text-blue-800">梯隊運動員點名系統</h1>
     <p class="text-sm text-gray-500 mb-4">請輸入系統密碼</p>
     <input id="op-name" class="inp mb-3" maxlength="20" placeholder="操作人姓名（選填，會記入紀錄）">
-    <input type="password" id="pwd" class="inp mb-4 text-lg" placeholder="系統密碼" autocomplete="current-password" onkeydown="if(event.key==='Enter')app.login()">
+    <input type="password" id="pwd" class="inp mb-2 text-lg" placeholder="系統密碼" autocomplete="current-password" onkeydown="if(event.key==='Enter')app.login()">
+    <label class="flex items-center justify-center gap-2 text-sm text-gray-600 mb-1"><input type="checkbox" id="remember" class="w-4 h-4"> 記住此瀏覽器（30 日內免再輸入密碼）</label>
+    <p class="text-xs text-gray-400 mb-4">不剔選：今日內免再輸入；按「登出」會即時作廢登入</p>
     <button class="btn bg-blue-600 w-full text-lg" onclick="app.login()">登入</button>
     <p id="login-msg" class="text-red-600 text-sm mt-4"></p>
   </div>
@@ -55,10 +57,11 @@
       <h2 class="text-xl font-bold mb-4 border-b pb-2">訓練點名</h2>
       <div id="att-filter" class="card grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
         <div><label class="lbl">日期</label><input type="date" id="att-date" class="inp" onchange="app.onSel()"></div>
-        <div><label class="lbl">組別</label><select id="att-team" class="inp" onchange="app.onSel()"></select></div>
+        <div><label class="lbl">大組別</label><select id="att-big" class="inp" onchange="app.fillSub('att-big');app.onSel()"></select></div>
+        <div><label class="lbl">細組別</label><select id="att-sub" class="inp" onchange="app.onSel()"></select></div>
         <div><label class="lbl">顯示</label>
           <select id="att-gender" class="inp" onchange="app.render()"><option value="all">全組</option><option value="M">男運動員</option><option value="F">女運動員</option></select></div>
-        <div class="col-span-2 md:col-span-2"><button class="btn bg-blue-600 w-full text-lg" onclick="app.loadList(true)">重新載入</button></div>
+        <div class="col-span-2 md:col-span-1"><button class="btn bg-blue-600 w-full text-lg" onclick="app.loadList(true)">重新載入</button></div>
       </div>
       <div id="att-note" class="hidden mb-3 p-2 bg-amber-50 border border-amber-300 rounded text-sm text-amber-800"></div>
       <div id="att-bar" class="hidden sticky top-0 z-20 bg-gray-100 pb-1">
@@ -83,8 +86,8 @@
       <h2 class="text-xl font-bold mb-4 border-b pb-2">運動員名單匯入 (CSV)</h2>
       <div class="card">
         <ul class="text-sm text-gray-600 list-disc list-inside mb-3">
-          <li>A 欄：組別　B 欄：性別（M/F 或 男/女）　C 欄：姓名　D 欄：歲數</li>
-          <li>系統以「組別＋姓名」識別運動員；同一組別內姓名不可重複。運動員轉組別會當作新運動員處理</li>
+          <li>A 欄：大組別（例 青訓）　B 欄：細組別（例 中長）　C 欄：性別（M/F 或 男/女）　D 欄：姓名　E 欄：歲數</li>
+          <li>系統以「大組別＋細組別＋姓名」識別運動員；同一細組別內姓名不可重複；組別名稱不可包含「/」。運動員轉組別會當作新運動員處理</li>
           <li class="text-red-600 font-bold">請以 CSV UTF-8 格式儲存</li>
         </ul>
         <button class="text-blue-600 font-bold underline mb-3" onclick="app.template()">下載 CSV 範本</button>
@@ -97,7 +100,7 @@
       <div class="card">
         <h3 class="font-bold mb-2">運動員備註（另一個 CSV）</h3>
         <ul class="text-sm text-gray-600 list-disc list-inside mb-3">
-          <li>欄位：組別、姓名、備註。備註留空＝清除該運動員備註</li>
+          <li>欄位：大組別、細組別、姓名、備註。備註留空＝清除該運動員備註</li>
           <li>只更新名單內的運動員，其他運動員不變</li>
           <li>點名時亦可直接撳運動員的「📝 備註」逐個修改。有備註的運動員會顯示黃點</li>
         </ul>
@@ -105,13 +108,24 @@
         <input type="file" id="rm-file" accept=".csv" class="inp mb-4">
         <button class="btn bg-blue-600" onclick="app.importRemark()">上載並更新</button>
       </div>
+      <div class="card border border-red-200">
+        <h3 class="font-bold text-red-700 mb-2">刪除指定運動員</h3>
+        <p class="text-sm text-gray-600 mb-3">只會將運動員從名單移除（先備份到「Deleted_Athletes」工作表）；已有的歷史點名紀錄會保留。</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+          <div><label class="lbl">大組別</label><select id="da-big" class="inp" onchange="app.fillSub('da-big');app.loadDel()"></select></div>
+          <div><label class="lbl">細組別</label><select id="da-sub" class="inp" onchange="app.loadDel()"></select></div>
+          <div><label class="lbl">運動員</label><select id="da-ath" class="inp"></select></div>
+          <button class="btn bg-red-600" onclick="app.delAthlete()">刪除</button>
+        </div>
+      </div>
       <div class="card">
         <h3 class="font-bold mb-2">下載點名紀錄（按日期範圍）</h3>
         <p class="text-sm text-gray-600 mb-3">先輸入開始及結束日期，再按下載。組別留空＝全部組別。</p>
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 items-end">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
           <div><label class="lbl">由</label><input type="date" id="ex-from" class="inp"></div>
           <div><label class="lbl">至</label><input type="date" id="ex-to" class="inp"></div>
-          <div><label class="lbl">組別</label><select id="ex-team" class="inp"></select></div>
+          <div><label class="lbl">大組別</label><select id="ex-big" class="inp" onchange="app.fillSub('ex-big')"></select></div>
+          <div><label class="lbl">細組別</label><select id="ex-sub" class="inp"></select></div>
           <button class="btn bg-green-600" onclick="app.exportYear()">下載 CSV</button>
         </div>
         <div id="ex-info" class="text-sm text-gray-600 mt-2"></div>
@@ -122,7 +136,7 @@
           <div><label class="lbl">範圍</label>
             <select id="rs-scope" class="inp" onchange="$('rs-team-wrap').classList.toggle('hidden', this.value!=='group')">
               <option value="group">指定組別</option><option value="all">全部組別</option></select></div>
-          <div id="rs-team-wrap"><label class="lbl">組別</label><select id="rs-team" class="inp"></select></div>
+          <div id="rs-team-wrap" class="flex gap-3"><div><label class="lbl">大組別</label><select id="rs-big" class="inp" onchange="app.fillSub('rs-big')"></select></div><div><label class="lbl">細組別</label><select id="rs-sub" class="inp"></select></div></div>
           <button class="btn bg-red-600" onclick="app.reset()">確認清除</button>
         </div>
       </div>
@@ -131,10 +145,11 @@
     <!-- 歷史 -->
     <section id="sec-history" class="hidden">
       <h2 class="text-xl font-bold mb-4 border-b pb-2">歷史紀錄查詢</h2>
-      <div class="card grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+      <div class="card grid grid-cols-2 md:grid-cols-7 gap-3 items-end">
         <div><label class="lbl">由</label><input type="date" id="h-from" class="inp"></div>
         <div><label class="lbl">至</label><input type="date" id="h-to" class="inp"></div>
-        <div><label class="lbl">組別</label><select id="h-team" class="inp"></select></div>
+        <div><label class="lbl">大組別</label><select id="h-big" class="inp" onchange="app.fillSub('h-big')"></select></div>
+        <div><label class="lbl">細組別</label><select id="h-sub" class="inp"></select></div>
         <div><label class="lbl">姓名</label><input id="h-kw" class="inp" placeholder="例：陳大文"></div>
         <div><label class="lbl">狀態</label><select id="h-status" class="inp"><option value="">全部</option><option>出席</option><option>遲到</option><option>病假</option><option>請假</option><option>缺席</option><option>比賽/海外訓練</option></select></div>
         <button class="btn bg-blue-600" onclick="app.loadHist()">搜尋</button>
@@ -153,10 +168,11 @@
     <!-- 運動員統計 -->
     <section id="sec-summary" class="hidden">
       <h2 class="text-xl font-bold mb-4 border-b pb-2">運動員統計（出席／遲到／病假／請假／缺席／比賽/海外訓練）</h2>
-      <div class="card grid grid-cols-2 md:grid-cols-6 gap-3 items-end">
+      <div class="card grid grid-cols-2 md:grid-cols-7 gap-3 items-end">
         <div><label class="lbl">由</label><input type="date" id="s-from" class="inp"></div>
         <div><label class="lbl">至</label><input type="date" id="s-to" class="inp"></div>
-        <div><label class="lbl">組別</label><select id="s-team" class="inp"></select></div>
+        <div><label class="lbl">大組別</label><select id="s-big" class="inp" onchange="app.fillSub('s-big')"></select></div>
+        <div><label class="lbl">細組別</label><select id="s-sub" class="inp"></select></div>
         <div><label class="lbl">缺席警示線 ≥</label><input type="number" id="s-tabs" class="inp" value="3" min="1" onchange="app.renderSum()"></div>
         <div><label class="lbl">遲到警示線 ≥</label><input type="number" id="s-tlate" class="inp" value="3" min="1" onchange="app.renderSum()"></div>
         <button class="btn bg-blue-600" onclick="app.loadSum()">統計</button>
@@ -187,8 +203,8 @@
 </div>
 
 <script>
-const API_URL = 'https://script.google.com/macros/s/AKfycbzlT5nvlqIZIaI1yrX_OpTZeczC10bhh0OQWA7nMUcbMqfB57fEP8aCP-fJ_hqjBxmEWQ/exec'; // 新部署的網頁應用程式網址（…/exec）
-const APP_VERSION = '3.0.0'; // 須與 Code.gs 的 VERSION 一致
+const API_URL = 'PASTE_NEW_WEB_APP_URL_HERE'; // 新部署的網頁應用程式網址（…/exec）
+const APP_VERSION = '3.1.0'; // 須與 Code.gs 的 VERSION 一致
 const STATUS = ['出席', '遲到', '病假', '請假', '缺席', '比賽/海外訓練'];
 const SC = { // on＝按鈕選中；tile＝格仔；chip＝統計標籤
   '出席': { ico: '🟢', on: '!bg-green-500 !text-white !border-green-600', tile: 'bg-green-100 border-green-400 text-green-900', chip: 'bg-green-100 border-green-300 text-green-800' },
@@ -199,6 +215,7 @@ const SC = { // on＝按鈕選中；tile＝格仔；chip＝統計標籤
   '比賽/海外訓練': { ico: '🔵', on: '!bg-blue-500 !text-white !border-blue-600', tile: 'bg-blue-500 border-blue-600 text-white', chip: 'bg-blue-100 border-blue-300 text-blue-800' }
 };
 const SUMDEF = [['Group', '組別'], ['Name', '姓名'], ['Gender', '性別'], ['Age', '歲數'], ['total', '總節數'], ['present', '出席'], ['late', '遲到'], ['sick', '病假'], ['leave', '請假'], ['abs', '缺席'], ['comp', '比賽/海外訓練'], ['prate', '出席率'], ['rate', '缺席率']];
+const GSEL = [['att-big', 'att-sub', '選擇大組別', '選擇細組別'], ['h-big', 'h-sub', '全部', '全部'], ['s-big', 's-sub', '全部', '全部'], ['ex-big', 'ex-sub', '全部', '全部'], ['rs-big', 'rs-sub', null, '全部細組別'], ['da-big', 'da-sub', null, '選擇細組別']]; // [大組別 select, 細組別 select, 大組別首項, 細組別首項]
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const gSym = g => g === 'M' ? '♂' : g === 'F' ? '♀' : '';
@@ -218,27 +235,55 @@ const app = {
   },
   today() { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); },
   fillGroups() {
-    const g = this.s.groups || [];
-    const set = (id, first) => { const el = $(id), v = el.value; el.innerHTML = (first != null ? `<option value="">${first}</option>` : '') + g.map(x => `<option>${esc(x)}</option>`).join(''); if (g.includes(v)) el.value = v; };
-    set('att-team', '選擇組別'); set('h-team', '全部'); set('s-team', '全部'); set('ex-team', '全部組別'); set('rs-team', null);
+    const G = this.s.groups || [];
+    GSEL.forEach(([b, , bf]) => {
+      const el = $(b), v = el.value;
+      el.innerHTML = (bf != null ? `<option value="">${bf}</option>` : '') + G.map(x => `<option>${esc(x.g)}</option>`).join('');
+      if (G.some(x => x.g === v)) el.value = v;
+      this.fillSub(b);
+    });
   },
+  fillSub(bigId) { // 大組別改變時，更新對應的細組別選項
+    const row = GSEL.find(x => x[0] === bigId), sel = $(row[1]), v = sel.value, e = (this.s.groups || []).find(x => x.g === $(bigId).value), subs = e ? e.subs : [];
+    sel.innerHTML = (row[3] != null ? `<option value="">${row[3]}</option>` : '') + subs.map(x => `<option>${esc(x)}</option>`).join('');
+    if (subs.includes(v)) sel.value = v;
+  },
+  tm(b, s) { const bv = $(b).value, sv = $(s).value; return bv ? (sv ? bv + '/' + sv : bv) : ''; }, // 組別字串：大組別 或 大組別/細組別
+  setTeam(t) { t = String(t); const i = t.indexOf('/'); $('att-big').value = i < 0 ? t : t.slice(0, i); this.fillSub('att-big'); $('att-sub').value = i < 0 ? '' : t.slice(i + 1); },
   async refreshGroups() { try { this.s.groups = await this.api('getGroups', {}, { silent: true }); this.fillGroups(); } catch (_) {} },
 
+  enter(u) {
+    this.s.role = u.role; $('who').textContent = '（' + u.email + '）';
+    this.s.groups = u.groups || []; this.fillGroups();
+    const vw = $('ver-warn');
+    if (u.version !== APP_VERSION) { vw.textContent = '⚠️ 後端版本（' + (u.version || '舊版') + '）與網頁（' + APP_VERSION + '）不一致，部分功能可能出錯。請把最新 Code.gs 重新部署為「新版本」。'; vw.classList.remove('hidden'); } else vw.classList.add('hidden');
+    $('nav-athletes').classList.toggle('hidden', u.role !== 'admin');
+    $('pwd').value = ''; $('login').classList.add('hidden'); $('main').classList.remove('hidden'); this.nav('attendance');
+  },
   async login() {
     const pwd = $('pwd').value;
     if (!pwd) { $('login-msg').textContent = '請輸入密碼'; return; }
-    this.s.token = pwd; this.s.op = $('op-name').value.trim().slice(0, 20); $('login-msg').textContent = '';
+    this.s.op = $('op-name').value.trim().slice(0, 20); $('login-msg').textContent = '';
     try {
-      const u = await this.api('whoami', {});
-      this.s.role = u.role; $('who').textContent = '（' + u.email + '）';
-      this.s.groups = u.groups || []; this.fillGroups();
-      const vw = $('ver-warn');
-      if (u.version !== APP_VERSION) { vw.textContent = '⚠️ 後端版本（' + (u.version || '舊版') + '）與網頁（' + APP_VERSION + '）不一致，部分功能可能出錯。請把最新 Code.gs 重新部署為「新版本」。'; vw.classList.remove('hidden'); } else vw.classList.add('hidden');
-      $('nav-athletes').classList.toggle('hidden', u.role !== 'admin');
-      $('pwd').value = ''; $('login').classList.add('hidden'); $('main').classList.remove('hidden'); this.nav('attendance');
+      const u = await this.api('login', { password: pwd, remember: $('remember').checked });
+      this.s.token = u.token;
+      try { localStorage.setItem('ath_tk', JSON.stringify({ token: u.token, exp: u.exp })); } catch (_) {} // 只存後端發出的憑證，不存密碼
+      this.enter(u);
     } catch (e) { this.s.token = ''; $('login-msg').textContent = e.message; }
   },
+  async resume() { // 開頁時用已存的憑證自動登入
+    let tk = null; try { tk = JSON.parse(localStorage.getItem('ath_tk')); } catch (_) {}
+    if (!tk || !tk.token || tk.exp < Date.now()) { try { localStorage.removeItem('ath_tk'); } catch (_) {} return; }
+    this.s.token = tk.token; $('login').classList.add('hidden');
+    try { this.enter(await this.api('whoami', {}, { silent: true })); }
+    catch (e) {
+      this.s.token = ''; $('login').classList.remove('hidden'); $('login-msg').textContent = e.message;
+      if (/登入已過期|密碼錯誤/.test(e.message)) { try { localStorage.removeItem('ath_tk'); } catch (_) {} }
+    }
+  },
   logout(msg) {
+    if (this.s.token && !msg) this.api('logout', {}, { silent: true }).catch(() => {}); // 通知後端作廢憑證
+    try { localStorage.removeItem('ath_tk'); } catch (_) {}
     this.s = { token: '', role: '', groups: [], athletes: [], att: {}, orig: {}, hist: [], busy: false, loaded: null, dirty: false };
     $('main').classList.add('hidden'); $('login').classList.remove('hidden'); $('login-msg').textContent = msg || '';
     $('att-list').innerHTML = ''; ['att-stats', 'att-submit', 'att-note'].forEach(i => $(i).classList.add('hidden')); this.closeSheet(); this.fillGroups();
@@ -250,14 +295,14 @@ const app = {
     if (!opt.silent) $('busy').classList.remove('hidden');
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 40000);
     try {
-      const res = await fetch(API_URL, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, password: this.s.token, operator: this.s.op || '' }, payload)) });
+      const res = await fetch(API_URL, { method: 'POST', signal: ctl.signal, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, token: this.s.token || '', operator: this.s.op || '' }, payload)) });
       let r; try { r = await res.json(); } catch (_) { throw new Error('伺服器回應格式不正確，請確認部署網址及存取權設定'); }
       if (!r.success) throw new Error(r.error || '未知錯誤');
       console.log('[PERF]', action, '總耗時', Math.round(performance.now() - t0) + 'ms', r.perf ? ('｜GAS內部(ms)：' + JSON.stringify(r.perf)) : '');
       return r.data;
     } catch (e) {
       const m = e.name === 'AbortError' ? '連線逾時，資料可能未有儲存，請稍後重試並先檢查紀錄' : (e instanceof TypeError ? '網絡連線失敗，資料未有儲存，請檢查網絡後再試' : e.message);
-      if (/密碼錯誤/.test(m) && this.s.token) { this.logout('密碼錯誤或已更改，請重新登入'); }
+      if (/密碼錯誤|登入已過期/.test(m) && this.s.token) { this.logout('登入已過期或密碼已更改，請重新登入'); }
       throw new Error(m);
     } finally { clearTimeout(t); if (!opt.silent) $('busy').classList.add('hidden'); }
   },
@@ -265,8 +310,8 @@ const app = {
   // ----- 點名 -----
   async loadList(btn) {
     if (btn && this.s.dirty && !confirm('目前有未提交的修改，重新載入會遺失。確定？')) return;
-    const team = $('att-team').value, date = $('att-date').value;
-    if (!team || !date) return alert('請填寫日期及選擇組別！');
+    const big = $('att-big').value, sub = $('att-sub').value, date = $('att-date').value, team = big + '/' + sub;
+    if (!big || !sub || !date) return alert('請填寫日期及選擇大組別、細組別！');
     try {
       const r = await this.api('getAthletes', { team, date, fresh: btn === true });
       if (!r.athletes.length) { this.clear(); return alert('找不到 ' + team + ' 組的運動員紀錄。'); }
@@ -286,7 +331,7 @@ const app = {
     $('att-bar').classList.toggle('hidden', !has);
     $('att-filter').classList.toggle('hidden', has && !this.s.filterOpen);
     if (!has) return;
-    $('att-sum').textContent = $('att-team').value || ''; $('att-date2').value = $('att-date').value;
+    $('att-sum').textContent = this.s.loaded ? this.s.loaded.team : ''; $('att-date2').value = $('att-date').value;
     ['all', 'M', 'F'].forEach(k => ['!bg-blue-600', '!text-white'].forEach(c => $('gb-' + k).classList.toggle(c, g === k)));
     ['grid', 'list'].forEach(k => ['!bg-blue-600', '!text-white'].forEach(c => $('vb-' + k).classList.toggle(c, this.vw === k)));
   },
@@ -376,7 +421,7 @@ const app = {
   // 只提交「目前顯示的性別」的運動員；後端會再次核實性別及比對載入時的狀態（Orig）
   async submit() {
     if (this.s.busy) return;
-    const team = $('att-team').value, date = $('att-date').value, g = $('att-gender').value, L0 = this.s.loaded;
+    const team = this.tm('att-big', 'att-sub'), date = $('att-date').value, g = $('att-gender').value, L0 = this.s.loaded;
     const label = this.gLabel(g), upd = this.hasSaved();
     const shown = this.s.athletes.filter(a => g === 'all' || a.Gender === g);
     const target = upd ? shown.filter(a => this.isChanged(a)) : shown;
@@ -413,17 +458,17 @@ const app = {
     } catch (e) { alert('❌ 清除失敗：\n' + e.message); }
   },
   onSel() {
-    const team = $('att-team').value, date = $('att-date').value, L = this.s.loaded;
-    if (L && (L.team !== team || L.date !== date) && this.s.dirty && !confirm('目前有未提交的修改，切換後會遺失。確定切換？')) { $('att-team').value = L.team; $('att-date').value = L.date; return; }
-    if (team && date) this.loadList(); else this.clear();
+    const big = $('att-big').value, sub = $('att-sub').value, team = big + '/' + sub, date = $('att-date').value, L = this.s.loaded;
+    if (L && (L.team !== team || L.date !== date) && this.s.dirty && !confirm('目前有未提交的修改，切換後會遺失。確定切換？')) { this.setTeam(L.team); $('att-date').value = L.date; return; }
+    if (big && sub && date) this.loadList(); else this.clear();
   },
   clear() { this.s.athletes = []; this.s.att = {}; this.s.orig = {}; this.s.loaded = null; this.s.dirty = false; $('att-list').innerHTML = ''; ['att-stats', 'att-submit', 'att-note'].forEach(i => $(i).classList.add('hidden')); this.closeSheet(); this.bar(); },
-  openSession(d, t) { $('att-date').value = d; $('att-team').value = t; this.nav('attendance'); this.onSel(); },
+  openSession(d, t) { $('att-date').value = d; this.setTeam(t); this.nav('attendance'); this.onSel(); },
 
   // ----- 歷史 -----
   async loadHist() {
     try {
-      const r = await this.api('getAttendanceHistory', { from: $('h-from').value, to: $('h-to').value, team: $('h-team').value, keyword: $('h-kw').value.trim(), status: $('h-status').value });
+      const r = await this.api('getAttendanceHistory', { from: $('h-from').value, to: $('h-to').value, team: this.tm('h-big', 'h-sub'), keyword: $('h-kw').value.trim(), status: $('h-status').value });
       this.s.hist = r.rows;
       $('h-info').textContent = `共 ${r.total} 筆` + (r.truncated ? '（超過上限，只載入首 20000 筆，請縮窄範圍）' : '');
       const G = {}, order = [];
@@ -452,7 +497,7 @@ const app = {
 
   // ----- 運動員統計 -----
   async loadSum() {
-    try { this.s.sum = await this.api('getAthleteSummary', { from: $('s-from').value, to: $('s-to').value, team: $('s-team').value }); this.renderSum(); }
+    try { this.s.sum = await this.api('getAthleteSummary', { from: $('s-from').value, to: $('s-to').value, team: this.tm('s-big', 's-sub') }); this.renderSum(); }
     catch (e) { alert('錯誤：' + e.message); }
   },
   sortSum(k) {
@@ -523,7 +568,7 @@ const app = {
   },
 
   // ----- 運動員管理 -----
-  template() { this.download('Squad_Athletes_Template.csv', '組別,性別,姓名,歲數\nU15,M,陳大文,14\nU15,F,李小美,15'); },
+  template() { this.download('Squad_Athletes_Template.csv', '大組別,細組別,性別,姓名,歲數\n青訓,中長,M,陳大文,14\n青訓,短途,F,李小美,15'); },
   importCsv(mode) {
     const f = $('csv-file').files[0];
     if (!f) return alert('請先選擇 CSV 檔案！');
@@ -532,12 +577,12 @@ const app = {
       res.data.forEach((r, i) => {
         if (i === 0 && /組/.test(r[0] || '')) return; // 標題列
         const t = k => String(r[k] == null ? '' : r[k]).trim();
-        if (!t(0) && !t(1) && !t(2)) return;
-        if (!t(0) || !t(1) || !t(2)) { bad.push(i + 1); return; }
-        athletes.push({ Group: t(0), Gender: t(1), Name: t(2), Age: t(3) });
+        if (!t(0) && !t(1) && !t(2) && !t(3)) return;
+        if (!t(0) || !t(1) || !t(2) || !t(3)) { bad.push(i + 1); return; }
+        athletes.push({ Group: t(0), SubGroup: t(1), Gender: t(2), Name: t(3), Age: t(4) });
       });
-      if (bad.length) return alert('以下行缺少組別、性別或姓名，請修正後再上傳：\n第 ' + bad.slice(0, 20).join('、') + ' 行');
-      if (!athletes.length) return alert('找不到有效資料，請檢查欄位位置（A–D 欄）及編碼（UTF-8）');
+      if (bad.length) return alert('以下行缺少大組別、細組別、性別或姓名，請修正後再上傳：\n第 ' + bad.slice(0, 20).join('、') + ' 行');
+      if (!athletes.length) return alert('找不到有效資料，請檢查欄位位置（A–E 欄）及編碼（UTF-8）');
       try {
         const p = await this.api('previewImport', { athletes, mode });
         const msg = mode === 'replace'
@@ -549,7 +594,7 @@ const app = {
       } catch (e) { alert('❌ 匯入失敗，名單沒有被修改：\n' + e.message); }
     }, error: e => alert('CSV 讀取失敗：' + e.message) });
   },
-  remarkTemplate() { this.download('Squad_Remarks_Template.csv', '組別,姓名,備註\nU15,陳大文,哮喘\nU15,李小美,左膝舊患'); },
+  remarkTemplate() { this.download('Squad_Remarks_Template.csv', '大組別,細組別,姓名,備註\n青訓,中長,陳大文,哮喘\n青訓,短途,李小美,左膝舊患'); },
   importRemark() {
     const f = $('rm-file').files[0];
     if (!f) return alert('請先選擇 CSV 檔案！');
@@ -558,12 +603,12 @@ const app = {
       res.data.forEach((r, i) => {
         if (i === 0 && /組/.test(r[0] || '')) return;
         const t = k => String(r[k] == null ? '' : r[k]).trim();
-        if (!t(0) && !t(1)) return;
-        if (!t(0) || !t(1)) { bad.push(i + 1); return; }
-        rows.push({ Group: t(0), Name: t(1), Remark: t(2) });
+        if (!t(0) && !t(1) && !t(2)) return;
+        if (!t(0) || !t(1) || !t(2)) { bad.push(i + 1); return; }
+        rows.push({ Group: t(0), SubGroup: t(1), Name: t(2), Remark: t(3) });
       });
-      if (bad.length) return alert('以下行缺少組別或姓名，請修正後再上傳：\n第 ' + bad.slice(0, 20).join('、') + ' 行');
-      if (!rows.length) return alert('找不到有效資料，欄位順序應為：組別、姓名、備註');
+      if (bad.length) return alert('以下行缺少大組別、細組別或姓名，請修正後再上傳：\n第 ' + bad.slice(0, 20).join('、') + ' 行');
+      if (!rows.length) return alert('找不到有效資料，欄位順序應為：大組別、細組別、姓名、備註');
       try {
         const p = await this.api('previewRemark', { rows });
         let msg = `將更新 ${p.matched} 名運動員的備註（其中有備註 ${p.withRemark} 人，其餘為清除）。`;
@@ -575,12 +620,34 @@ const app = {
       } catch (e) { alert('❌ 上載失敗，沒有修改任何資料：\n' + e.message); }
     }, error: e => alert('CSV 讀取失敗：' + e.message) });
   },
+  // 刪除指定運動員（管理員）
+  async loadDel() {
+    const sel = $('da-ath'), team = (($('da-big').value && $('da-sub').value) ? $('da-big').value + '/' + $('da-sub').value : '');
+    sel.innerHTML = '';
+    if (!team) return;
+    try {
+      const r = await this.api('getAthletes', { team, date: this.today() }, { silent: true });
+      sel.innerHTML = r.athletes.map(a => `<option value="${esc(a.AthleteID)}">${esc(a.Name)}（${esc(gSym(a.Gender) + (a.Age || ''))}）</option>`).join('');
+    } catch (e) { alert('錯誤：' + e.message); }
+  },
+  async delAthlete() {
+    const id = $('da-ath').value; if (!id) return alert('請先選擇組別及運動員');
+    const name = $('da-ath').selectedOptions[0].textContent, team = $('da-big').value + '/' + $('da-sub').value;
+    if (!confirm(`⚠️ 刪除運動員【${name}】（${team}）？\n只會從名單移除，已有的歷史點名紀錄會保留。\n刪除前會備份到「Deleted_Athletes」工作表。`)) return;
+    try {
+      await this.api('deleteAthlete', { athleteId: id });
+      const k = this.s.athletes.findIndex(a => a.AthleteID === id); // 點名頁若正顯示該運動員，同步移除
+      if (k >= 0) { this.s.athletes.splice(k, 1); delete this.s.att[id]; delete this.s.orig[id]; if (this.s.athletes.length) this.render(); else this.clear(); }
+      alert('✅ 已刪除：' + name);
+      await this.refreshGroups(); this.loadDel();
+    } catch (e) { alert('❌ 刪除失敗：\n' + e.message); }
+  },
   async exportYear() {
     const from = $('ex-from').value, to = $('ex-to').value;
     if (!from || !to) return alert('請輸入開始及結束日期');
     if (from > to) return alert('開始日期不可遲於結束日期');
     try {
-      const r = await this.api('exportAttendance', { from, to, team: $('ex-team').value });
+      const r = await this.api('exportAttendance', { from, to, team: this.tm('ex-big', 'ex-sub') });
       if (!r.rows.length) return alert('這段期間沒有點名紀錄');
       const rows = r.rows.map(x => x.map(v => this.csvCell(v)).join(','));
       this.download('Squad_Attendance_' + from + '_to_' + to + '.csv', '日期,組別,姓名,性別,狀態,更新人\n' + rows.join('\n'));
@@ -588,9 +655,9 @@ const app = {
     } catch (e) { alert('錯誤：' + e.message); }
   },
   async reset() {
-    const scope = $('rs-scope').value, team = $('rs-team').value;
-    if (scope === 'group' && !team) return alert('請選擇組別');
-    const label = scope === 'group' ? team + ' 組' : '全部組別';
+    const scope = $('rs-scope').value, team = this.tm('rs-big', 'rs-sub');
+    if (scope === 'group' && !team) return alert('請選擇大組別');
+    const label = scope === 'group' ? team : '全部組別';
     if (prompt(`⚠️ 即將清除【${label}】的所有點名紀錄（會先自動備份）。\n請輸入 DELETE 確認：`) !== 'DELETE') return alert('已取消');
     try { const r = await this.api('resetRecords', { scope, targetTeam: team, confirmText: 'DELETE' }); alert('✅ ' + r.message); }
     catch (e) { alert('❌ ' + e.message); }
@@ -598,7 +665,7 @@ const app = {
 };
 window.addEventListener('beforeunload', e => { if (app.s.dirty || app.s.busy) { e.preventDefault(); e.returnValue = ''; } });
 if (/^https:/.test(API_URL)) fetch(API_URL, { mode: 'no-cors' }).catch(() => {}); // 開頁即叫醒後端
-app.init();
+app.init(); app.resume();
 </script>
 </body>
 </html>
