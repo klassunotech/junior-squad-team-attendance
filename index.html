@@ -74,6 +74,7 @@
           <button id="vb-grid" class="gb" onclick="app.setView('grid')">▦ 格仔</button><button id="vb-list" class="gb" onclick="app.setView('list')">☰ 列表</button>
           <button class="gb" onclick="app.openFilter()">更改組別</button><button class="gb !text-red-700 !border-red-300" onclick="app.clearSession()">🗑 清除本堂</button>
         </div>
+        <div id="att-subs" class="flex flex-wrap gap-1.5 pb-1"></div>
         <div id="att-stats" class="hidden p-2 bg-blue-50 border border-blue-100 rounded-lg text-xs font-bold flex flex-wrap gap-1.5"></div>
       </div>
       <div id="att-list"></div>
@@ -274,6 +275,8 @@ const SC = { // on＝按鈕選中；tile＝格仔；chip＝統計標籤
 };
 const SUMDEF = [['Group', '組別'], ['Name', '姓名'], ['Age', '歲數'], ['total', '總節數'], ['present', '出席'], ['late', '遲到'], ['sick', '病假'], ['leave', '請假'], ['abs', '缺席'], ['comp', '比賽/海外訓練'], ['prate', '出席率'], ['rate', '缺席率']];
 const GSEL = [['att-big', 'att-sub', '選擇大組別', '選擇細組別'], ['h-big', 'h-sub', '全部', '全部'], ['s-big', 's-sub', '全部', '全部'], ['ex-big', 'ex-sub', '全部', '全部'], ['rs-big', 'rs-sub', null, '全部細組別'], ['da-big', 'da-sub', null, '選擇細組別'], ['gd-big', 'gd-sub', null, '整個大組別（須全部細組別都沒有運動員）'], ['tr-big', 'tr-sub', '全部', '全部'], ['tg-big', 'tg-sub', '選擇大組別', '選擇細組別']]; // [大組別 select, 細組別 select, 大組別首項, 細組別首項]
+const NOALL = ['gd-sub', 'tg-sub', 'rs-sub']; // 這些細組別下拉不提供「全選」（必須指定單一細組別）
+const ALL_SUB = '全選'; // 「全選」選項的值
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const up = s => String(s == null ? '' : s).toUpperCase();
@@ -301,13 +304,27 @@ const app = {
       this.fillSub(b);
     });
   },
-  fillSub(bigId) { // 大組別改變時，更新對應的細組別選項
-    const row = GSEL.find(x => x[0] === bigId), sel = $(row[1]), v = sel.value, e = (this.s.groups || []).find(x => x.g === $(bigId).value), subs = e ? e.subs : [];
-    sel.innerHTML = (row[3] != null ? `<option value="">${row[3]}</option>` : '') + subs.map(x => `<option>${esc(x)}</option>`).join('');
-    if (subs.includes(v)) sel.value = v;
+  fillSub(bigId) { // 大組別改變時，更新對應的細組別選項（如適用，加入「全選」）
+    const row = GSEL.find(x => x[0] === bigId), sel = $(row[1]), v = sel.value,
+          e = (this.s.groups || []).find(x => x.g === $(bigId).value), subs = e ? e.subs : [];
+    const allOpt = (!NOALL.includes(row[1]) && subs.length > 1)
+      ? `<option value="${ALL_SUB}">${ALL_SUB}（全部細組別）</option>` : '';
+    sel.innerHTML = (row[3] != null ? `<option value="">${row[3]}</option>` : '')
+      + allOpt + subs.map(x => `<option>${esc(x)}</option>`).join('');
+    if (v === ALL_SUB && allOpt) sel.value = ALL_SUB;
+    else if (subs.includes(v)) sel.value = v;
   },
-  tm(b, s) { const bv = $(b).value, sv = $(s).value; return bv ? (sv ? bv + '/' + sv : bv) : ''; }, // 組別字串：大組別 或 大組別/細組別
-  setTeam(t) { t = String(t); const i = t.indexOf('/'); $('att-big').value = i < 0 ? t : t.slice(0, i); this.fillSub('att-big'); $('att-sub').value = i < 0 ? '' : t.slice(i + 1); },
+  tm(b, s) { // 組別字串：大組別 或 大組別/細組別；「全選」＝只有大組別
+    const bv = $(b).value, sv = $(s).value;
+    return bv ? ((!sv || sv === ALL_SUB) ? bv : bv + '/' + sv) : '';
+  },
+  setTeam(t) {
+    t = String(t); const i = t.indexOf('/');
+    $('att-big').value = i < 0 ? t : t.slice(0, i);
+    this.fillSub('att-big');
+    const subs = ((this.s.groups || []).find(x => x.g === $('att-big').value) || { subs: [] }).subs;
+    $('att-sub').value = i < 0 ? (subs.length > 1 ? ALL_SUB : '') : t.slice(i + 1);
+  },
   async refreshGroups() { try { this.s.groups = await this.api('getGroups', {}, { silent: true }); this.fillGroups(); } catch (_) {} },
 
   enter(u) {
@@ -372,17 +389,47 @@ const app = {
   // ----- 點名 -----
   async loadList(btn) {
     if (btn && this.s.dirty && !confirm('目前有未提交的修改，重新載入會遺失。確定？')) return;
-    const big = $('att-big').value, sub = $('att-sub').value, date = $('att-date').value, team = big + '/' + sub;
+    const big = $('att-big').value, sub = $('att-sub').value, date = $('att-date').value;
     if (!big || !sub || !date) return alert('請填寫日期及選擇大組別、細組別！');
     try {
-      const r = await this.api('getAthletes', { team, date, fresh: btn === true });
-      if (!r.athletes.length) { this.clear(); return alert('找不到 ' + team + ' 組的運動員紀錄。'); }
-      const def = r.defaultStatus === '出席' ? '出席' : '缺席'; this.s.defStatus = def; // 沒有已儲存紀錄的運動員，使用後端設定的預設狀態
-      this.s.athletes = r.athletes; this.s.att = {}; this.s.orig = Object.assign({}, r.saved);
-      let n = 0;
-      r.athletes.forEach(a => { const sv = r.saved[a.AthleteID]; if (sv) n++; this.s.att[a.AthleteID] = sv || def; });
-      this.noteUpdate(n, date, team);
-      this.s.loaded = { team, date }; this.s.filterOpen = false; this.s.dirty = false; this.render(); ['att-stats', 'att-submit'].forEach(i => $(i).classList.remove('hidden'));
+      if (sub === ALL_SUB) {
+        // 全選：逐個細組別查詢，合併；每個運動員記住 _team 以便提交時分組
+        const e = (this.s.groups || []).find(x => x.g === big);
+        if (!e || !e.subs.length) { this.clear(); return alert('此大組別未有細組別。'); }
+        const results = await Promise.all(e.subs.map(async s => {
+          try {
+            const r = await this.api('getAthletes', { team: big + '/' + s, date, fresh: btn === true }, { silent: true });
+            return { sub: s, r };
+          } catch (err) { return { sub: s, error: err.message }; }
+        }));
+        const allAthletes = [], allSaved = {};
+        let def = '缺席'; const errs = [];
+        results.forEach(x => {
+          if (x.error) { errs.push(x.sub + '：' + x.error); return; }
+          def = x.r.defaultStatus === '出席' ? '出席' : '缺席';
+          x.r.athletes.forEach(a => { a._team = big + '/' + x.sub; allAthletes.push(a); });
+          Object.assign(allSaved, x.r.saved);
+        });
+        if (!allAthletes.length) { this.clear(); return alert('找不到 ' + big + ' 組的運動員紀錄。' + (errs.length ? '\n' + errs.join('\n') : '')); }
+        this.s.defStatus = def;
+        this.s.athletes = allAthletes; this.s.att = {}; this.s.orig = Object.assign({}, allSaved);
+        let n = 0;
+        allAthletes.forEach(a => { const sv = allSaved[a.AthleteID]; if (sv) n++; this.s.att[a.AthleteID] = sv || def; });
+        this.noteUpdate(n, date, big);
+        this.s.loaded = { team: big, date }; this.s.filterOpen = false; this.s.dirty = false; this.render();
+        ['att-stats', 'att-submit'].forEach(i => $(i).classList.remove('hidden'));
+        if (errs.length) alert('部分細組別載入失敗：\n' + errs.join('\n'));
+      } else {
+        const team = big + '/' + sub;
+        const r = await this.api('getAthletes', { team, date, fresh: btn === true });
+        if (!r.athletes.length) { this.clear(); return alert('找不到 ' + team + ' 組的運動員紀錄。'); }
+        const def = r.defaultStatus === '出席' ? '出席' : '缺席'; this.s.defStatus = def; // 沒有已儲存紀錄的運動員，使用後端設定的預設狀態
+        this.s.athletes = r.athletes; this.s.att = {}; this.s.orig = Object.assign({}, r.saved);
+        let n = 0;
+        r.athletes.forEach(a => { const sv = r.saved[a.AthleteID]; if (sv) n++; this.s.att[a.AthleteID] = sv || def; });
+        this.noteUpdate(n, date, team);
+        this.s.loaded = { team, date }; this.s.filterOpen = false; this.s.dirty = false; this.render(); ['att-stats', 'att-submit'].forEach(i => $(i).classList.remove('hidden'));
+      }
     } catch (e) { this.clear(); alert('錯誤：' + e.message); }
   },
   noteUpdate(n, date, team) {
@@ -396,6 +443,14 @@ const app = {
     if (!has) return;
     $('att-sum').textContent = this.s.loaded ? this.s.loaded.team : ''; $('att-date2').value = $('att-date').value;
     ['grid', 'list'].forEach(k => ['!bg-blue-600', '!text-white'].forEach(c => $('vb-' + k).classList.toggle(c, this.vw === k)));
+    const tm = this.s.loaded ? this.s.loaded.team : '', i = tm.indexOf('/'), big = i < 0 ? tm : tm.slice(0, i), cur = i < 0 ? ALL_SUB : tm.slice(i + 1);
+    const e = (this.s.groups || []).find(x => x.g === big), subs = e ? e.subs : [];
+    $('att-subs').innerHTML = subs.length > 1 ? subs.map((s, k) => `<button class="gb ${s === cur ? '!bg-blue-600 !text-white' : ''}" onclick="app.pickSub(${k})">${esc(s)}</button>`).join('') : '';
+  },
+  pickSub(k) { // 點名頁快速切換同一大組別下的細組別
+    const tm = this.s.loaded ? this.s.loaded.team : '', i = tm.indexOf('/'), big = i < 0 ? tm : tm.slice(0, i);
+    const e = (this.s.groups || []).find(x => x.g === big); if (!e || !e.subs[k]) return;
+    $('att-sub').value = e.subs[k]; this.onSel();
   },
   setView(v) { this.vw = v; try { localStorage.setItem('ath_view', v); } catch (_) {} this.render(); },
   setDate(v) { if (!v) return; $('att-date').value = v; this.onSel(); this.bar(); },
@@ -480,11 +535,54 @@ const app = {
   // 提交整個組別；後端會再次核實名單，並比對載入時的狀態（Orig）
   async submit() {
     if (this.s.busy) return;
-    const team = this.tm('att-big', 'att-sub'), date = $('att-date').value, L0 = this.s.loaded, upd = this.hasSaved();
+    const date = $('att-date').value, L0 = this.s.loaded;
+    const isAll = L0 && L0.team === $('att-big').value && $('att-sub').value === ALL_SUB;
+    const upd = this.hasSaved();
     const shown = this.s.athletes;
     const target = upd ? shown.filter(a => this.isChanged(a)) : shown;
     if (!target.length) return alert(upd ? '沒有任何修改，毋須更新。' : '目前沒有可提交的運動員');
-    const snap = target.map(a => ({ id: a.AthleteID, st: this.s.att[a.AthleteID] }));
+    const snap = target.map(a => ({ id: a.AthleteID, st: this.s.att[a.AthleteID], a }));
+
+    // 全選模式：按每位運動員實際所屬的細組別分組提交
+    if (isAll) {
+      const groups = {};
+      target.forEach(a => {
+        const t = a._team || L0.team;
+        if (!groups[t]) groups[t] = [];
+        groups[t].push(a);
+      });
+      const teamNames = Object.keys(groups);
+      if (!confirm(`確認提交以下組別的點名？\n${teamNames.join('\n')}\n共 ${target.length} 人。`)) return;
+      this.s.busy = true; const btn = $('submit-btn'); btn.disabled = true; btn.textContent = '⏳ 提交中…（請勿關閉頁面）';
+      try {
+        const results = [];
+        for (const t of teamNames) {
+          const groupAthletes = groups[t];
+          const groupUpd = groupAthletes.some(a => this.s.orig[a.AthleteID] !== undefined);
+          const records = groupAthletes.map(a => ({
+            AthleteID: a.AthleteID,
+            AttendanceStatus: this.s.att[a.AthleteID],
+            Orig: this.s.orig[a.AthleteID] !== undefined ? this.s.orig[a.AthleteID] : null
+          }));
+          const r = await this.api('saveAttendance', { sessionData: { team: t, date, mode: groupUpd ? 'update' : 'full' }, records }, { silent: true });
+          results.push(t + '：' + r.message);
+        }
+        if (this.s.loaded === L0) {
+          snap.forEach(x => { this.s.orig[x.id] = x.st; });
+          this.s.dirty = this.s.athletes.some(a => this.s.orig[a.AthleteID] !== undefined && this.s.att[a.AthleteID] !== this.s.orig[a.AthleteID]);
+          this.noteUpdate(1, date, L0.team);
+        }
+        this.s.busy = false; btn.disabled = false; if (this.s.athletes.length) this.render();
+        alert('✅ 提交完成\n' + results.join('\n'));
+      } catch (e) {
+        this.s.busy = false; btn.disabled = false; if (this.s.athletes.length) this.render();
+        alert('❌ 提交失敗，資料未確認儲存（修改已保留，可再按提交）：\n' + e.message);
+      }
+      return;
+    }
+
+    // 單一細組別模式（原邏輯）
+    const team = this.tm('att-big', 'att-sub');
     const records = snap.map(x => ({ AthleteID: x.id, AttendanceStatus: x.st, Orig: this.s.orig[x.id] !== undefined ? this.s.orig[x.id] : null }));
     const names = target.slice(0, 8).map(a => a.Name).join('、') + (target.length > 8 ? '…' : '');
     const msg = upd ? `更新 ${team}（${date}）的點名紀錄？\n只會更新 ${target.length} 名運動員：${names}${this.nUn(target) ? `\n⚠️ 其中 ${this.nUn(target)} 人是首次記錄（未點名的會按畫面現時狀態儲存）` : ''}\n其他運動員的紀錄不受影響。`
@@ -493,7 +591,7 @@ const app = {
     this.s.busy = true; const btn = $('submit-btn'); btn.disabled = true; btn.textContent = '⏳ 提交中…（請勿關閉頁面）';
     try {
       const r = await this.api('saveAttendance', { sessionData: { team, date, mode: upd ? 'update' : 'full' }, records }, { silent: true });
-      if (this.s.loaded === L0) { // 上傳期間若已切換組別／日期，就不要動新載入的資料
+      if (this.s.loaded === L0) {
         snap.forEach(x => { this.s.orig[x.id] = x.st; });
         this.s.dirty = this.s.athletes.some(a => this.s.orig[a.AthleteID] !== undefined && this.s.att[a.AthleteID] !== this.s.orig[a.AthleteID]);
         this.noteUpdate(1, date, team);
@@ -509,13 +607,30 @@ const app = {
     const L = this.s.loaded; if (!L || this.s.busy) return;
     if (!confirm(`⚠️ 清除 ${L.team}（${L.date}）已儲存的點名紀錄？\n清除後可重新點名；被清除的紀錄會備份到「Deleted_Log」工作表。\n（畫面上未提交的修改也會被重置）`)) return;
     try {
+      // 全選模式：需要逐個細組別清除
+      if ($('att-sub').value === ALL_SUB && L.team === $('att-big').value) {
+        const e = (this.s.groups || []).find(x => x.g === L.team);
+        if (!e) return;
+        const results = [];
+        for (const s of e.subs) {
+          try {
+            const r = await this.api('clearSession', { team: L.team + '/' + s, date: L.date }, { silent: true });
+            results.push(s + '：' + r.message);
+          } catch (err) { results.push(s + '：' + err.message); }
+        }
+        this.s.dirty = false; await this.loadList(true);
+        alert('✅ 清除完成\n' + results.join('\n'));
+        return;
+      }
       const r = await this.api('clearSession', { team: L.team, date: L.date });
       this.s.dirty = false; await this.loadList(true);
       alert('✅ ' + r.message);
     } catch (e) { alert('❌ 清除失敗：\n' + e.message); }
   },
   onSel() {
-    const big = $('att-big').value, sub = $('att-sub').value, team = big + '/' + sub, date = $('att-date').value, L = this.s.loaded;
+    const big = $('att-big').value, sub = $('att-sub').value;
+    const team = sub === ALL_SUB ? big : big + '/' + sub;
+    const date = $('att-date').value, L = this.s.loaded;
     if (L && (L.team !== team || L.date !== date) && this.s.dirty && !confirm('目前有未提交的修改，切換後會遺失。確定切換？')) { this.setTeam(L.team); $('att-date').value = L.date; return; }
     if (big && sub && date) this.loadList(); else this.clear();
   },
@@ -681,17 +796,35 @@ const app = {
   },
   // 刪除指定運動員（管理員）
   async loadDel() {
-    const sel = $('da-ath'), team = (($('da-big').value && $('da-sub').value) ? $('da-big').value + '/' + $('da-sub').value : '');
+    const sel = $('da-ath'), big = $('da-big').value, sub = $('da-sub').value;
     sel.innerHTML = '';
-    if (!team) return;
+    if (!big || !sub) return;
     try {
-      const r = await this.api('getAthletes', { team, date: this.today() }, { silent: true });
-      sel.innerHTML = r.athletes.map(a => `<option value="${esc(a.AthleteID)}">${esc(a.Name)}${a.Age ? '（' + esc(a.Age) + '）' : ''}</option>`).join('');
+      let athletes = [];
+      if (sub === ALL_SUB) {
+        const e = (this.s.groups || []).find(x => x.g === big);
+        if (!e) return;
+        const results = await Promise.all(e.subs.map(async s => {
+          try {
+            const r = await this.api('getAthletes', { team: big + '/' + s, date: this.today() }, { silent: true });
+            return r.athletes.map(a => Object.assign({}, a, { _team: big + '/' + s }));
+          } catch (_) { return []; }
+        }));
+        athletes = results.flat();
+      } else {
+        const r = await this.api('getAthletes', { team: big + '/' + sub, date: this.today() }, { silent: true });
+        athletes = r.athletes;
+      }
+      sel.innerHTML = athletes.map(a => {
+        const subLabel = a._team ? a._team.split('/').slice(1).join('/') : '';
+        return `<option value="${esc(a.AthleteID)}">${esc(a.Name)}${a.Age ? '（' + esc(a.Age) + '）' : ''}${subLabel ? ' - ' + esc(subLabel) : ''}</option>`;
+      }).join('');
     } catch (e) { alert('錯誤：' + e.message); }
   },
   async delAthlete() {
     const id = $('da-ath').value; if (!id) return alert('請先選擇組別及運動員');
-    const name = $('da-ath').selectedOptions[0].textContent, team = $('da-big').value + '/' + $('da-sub').value;
+    const name = $('da-ath').selectedOptions[0].textContent;
+    const team = $('da-sub').value === ALL_SUB ? $('da-big').value + '（全組）' : $('da-big').value + '/' + $('da-sub').value;
     if (!confirm(`⚠️ 刪除運動員【${name}】（${team}）？\n只會從名單移除，已有的歷史點名紀錄會保留。\n刪除前會備份到「Deleted_Athletes」工作表。`)) return;
     try {
       await this.api('deleteAthlete', { athleteId: id });
@@ -762,8 +895,8 @@ const app = {
     catch (e) { alert('錯誤：' + e.message); }
   },
   trRows() {
-    const A = this.s.trAll || [], b = up($('tr-big').value), s = up($('tr-sub').value), k = $('tr-kw').value.trim().toLowerCase();
-    return A.filter(a => (!b || up(a.Big) === b) && (!s || up(a.Sub) === s) && (!k || String(a.Name).toLowerCase().includes(k)));
+    const A = this.s.trAll || [], b = up($('tr-big').value), sRaw = $('tr-sub').value, s = up(sRaw), k = $('tr-kw').value.trim().toLowerCase();
+    return A.filter(a => (!b || up(a.Big) === b) && (!s || sRaw === ALL_SUB || up(a.Sub) === s) && (!k || String(a.Name).toLowerCase().includes(k)));
   },
   renderTr() {
     if (!this.s.trAll) return;
