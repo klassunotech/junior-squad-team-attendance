@@ -1093,4 +1093,103 @@ const app = {
     try {
       await this.api('deleteAthlete', { athleteId: id });
       const k = this.s.athletes.findIndex(a => a.AthleteID === id); // 點名頁若正顯示該運動員，同步移除
-      if (k >= 0) { this.
+      if (k >= 0) { this.s.athletes.splice(k, 1); delete this.s.att[id]; delete this.s.orig[id]; if (this.s.athletes.length) this.render(); else this.clear(); }
+      this.s.trAll = null;
+      alert('✅ 已刪除：' + name);
+      await this.refreshGroups(); this.loadDel();
+    } catch (e) { alert('❌ 刪除失敗：\n' + e.message); }
+  },
+  async exportYear() {
+    const from = $('ex-from').value, to = $('ex-to').value;
+    if (!from || !to) return alert('請輸入開始及結束日期');
+    if (from > to) return alert('開始日期不可遲於結束日期');
+    try {
+      const r = await this.api('exportAttendance', { from, to, team: this.tm('ex-big', 'ex-sub') });
+      if (!r.rows.length) return alert('這段期間沒有點名紀錄');
+      const rows = r.rows.map(x => x.map(v => this.csvCell(v)).join(','));
+      this.download('Squad_Attendance_' + from + '_to_' + to + '.csv', '日期,組別,姓名,狀態,更新人\n' + rows.join('\n'));
+      $('ex-info').textContent = '已下載 ' + r.rows.length + ' 筆（' + from + ' 至 ' + to + '）';
+    } catch (e) { alert('錯誤：' + e.message); }
+  },
+  async reset() {
+    const scope = $('rs-scope').value, team = this.tm('rs-big', 'rs-sub');
+    if (scope === 'group' && !team) return alert('請選擇大組別');
+    const label = scope === 'group' ? team : '全部組別';
+    if (prompt(`⚠️ 即將清除【${label}】的所有點名紀錄（會先自動備份）。\n請輸入 DELETE 確認：`) !== 'DELETE') return alert('已取消');
+    try { const r = await this.api('resetRecords', { scope, targetTeam: team, confirmText: 'DELETE' }); alert('✅ ' + r.message); }
+    catch (e) { alert('❌ ' + e.message); }
+  },
+
+  // ----- F1：預設點名狀態 -----
+  async saveDefault() {
+    const v = $('def-status').value;
+    try {
+      const r = await this.api('setDefaultStatus', { status: v });
+      this.s.defStatus = r.defaultStatus;
+      alert('✅ 已儲存：日後新開的點名預設為「' + r.defaultStatus + '」\n（已儲存的紀錄及目前畫面不受影響）');
+    } catch (e) { alert('❌ 儲存失敗：\n' + e.message); }
+  },
+
+  // ----- F3：組別管理 -----
+  async addGroup() {
+    const g = $('ag-big').value.trim(), s = $('ag-sub').value.trim();
+    if (!g) return alert('請輸入大組別名稱');
+    if (g.includes('/') || s.includes('/')) return alert('組別名稱不可包含「/」');
+    try {
+      await this.api('addGroup', { big: g, sub: s });
+      $('ag-big').value = ''; $('ag-sub').value = ''; await this.refreshGroups();
+      alert('✅ 已新增組別：' + g + (s ? '/' + s : ''));
+    } catch (e) { alert('❌ 新增失敗：\n' + e.message); }
+  },
+  async delGroup() {
+    const g = $('gd-big').value, s = $('gd-sub').value;
+    if (!g) return alert('請選擇要刪除的大組別');
+    const label = g + (s ? '/' + s : '（整個大組別）');
+    if (!confirm(`⚠️ 刪除組別【${label}】？\n只有沒有運動員的組別才可刪除；歷史點名紀錄不會被刪除。\n此操作無法還原（可重新新增同名組別）。`)) return;
+    try {
+      await this.api('deleteGroup', { big: g, sub: s });
+      await this.refreshGroups(); this.s.trAll = null;
+      alert('✅ 已刪除組別：' + label);
+    } catch (e) { alert('❌ 刪除失敗：\n' + e.message); }
+  },
+
+  // ----- F4：運動員轉組管理 -----
+  async loadTr() {
+    try { this.s.trAll = await this.api('listAthletes', {}); this.s.trSel = {}; this.renderTr(); }
+    catch (e) { alert('錯誤：' + e.message); }
+  },
+  trRows() {
+    const A = this.s.trAll || [], b = up($('tr-big').value), sRaw = $('tr-sub').value, s = up(sRaw), k = $('tr-kw').value.trim().toLowerCase();
+    return A.filter(a => (!b || up(a.Big) === b) && (!s || sRaw === ALL_SUB || up(a.Sub) === s) && (!k || String(a.Name).toLowerCase().includes(k)));
+  },
+  renderTr() {
+    if (!this.s.trAll) return;
+    const rows = this.trRows(), sel = this.s.trSel || {}, show = rows.slice(0, 500);
+    $('tr-body').innerHTML = show.length ? show.map(a => `<tr class="border-b"><td class="p-3"><label class="kt-tap"><input type="checkbox" class="w-5 h-5" ${sel[a.AthleteID] ? 'checked' : ''} onchange="app.trTog('${esc(a.AthleteID)}',this.checked)"></label></td><td class="p-3 font-bold">${esc(a.Name)}</td><td class="p-3">${esc(a.Age)}</td><td class="p-3">${esc(a.Big)}</td><td class="p-3">${esc(a.Sub)}</td></tr>`).join('') + (rows.length > 500 ? '<tr><td colspan="5" class="p-3 text-center text-gray-500">只顯示首 500 人，請用上方篩選縮窄範圍</td></tr>' : '') : '<tr><td colspan="5" class="p-4 text-center text-gray-500">沒有符合的運動員</td></tr>';
+    this.trCount();
+  },
+  trSelected() { const sel = this.s.trSel || {}; return this.trRows().filter(a => sel[a.AthleteID]); }, // 只計算目前篩選結果內已剔選的人
+  trCount() { $('tr-cnt').textContent = '已選 ' + this.trSelected().length + ' 人'; },
+  trTog(id, on) { this.s.trSel = this.s.trSel || {}; if (on) this.s.trSel[id] = 1; else delete this.s.trSel[id]; this.trCount(); },
+  trAllTog(on) { this.s.trSel = this.s.trSel || {}; this.trRows().slice(0, 500).forEach(a => { if (on) this.s.trSel[a.AthleteID] = 1; else delete this.s.trSel[a.AthleteID]; }); this.renderTr(); },
+  async doMove() {
+    const list = this.trSelected(), big = $('tg-big').value, sub = $('tg-sub').value;
+    if (!list.length) return alert('請先剔選要轉組的運動員');
+    if (!big || !sub) return alert('請選擇轉往的大組別及細組別');
+    const names = list.slice(0, 8).map(a => a.Name + '（' + a.Big + '/' + a.Sub + '）').join('、') + (list.length > 8 ? '…' : '');
+    if (!confirm(`確認將 ${list.length} 名運動員轉往【${big}/${sub}】？\n${names}\n\n運動員 ID 不變；歷史點名紀錄保留原來的組別名稱；之後的點名會歸入新組別。`)) return;
+    try {
+      const r = await this.api('moveAthletes', { ids: list.map(a => a.AthleteID), big, sub });
+      this.s.trSel = {};
+      if (this.s.athletes.length && !this.s.dirty) this.clear(); // 點名頁的名單已過期，清走（有未提交修改時則保留，請稍後按「重新載入」）
+      await this.loadTr(); await this.refreshGroups();
+      alert(`✅ 轉組成功：已將 ${r.moved} 名運動員轉往 ${r.group}` + (r.skipped ? `\n（${r.skipped} 人原本已在該組，沒有更改）` : '') + (this.s.dirty ? '\n⚠️ 點名頁有未提交的修改，請提交後再按「重新載入」。' : ''));
+    } catch (e) { alert('❌ 轉組失敗，沒有修改任何資料：\n' + e.message); }
+  }
+};
+window.addEventListener('beforeunload', e => { if (app.s.dirty || app.s.busy) { e.preventDefault(); e.returnValue = ''; } });
+if (/^https:/.test(API_URL)) fetch(API_URL, { mode: 'no-cors' }).catch(() => {}); // 開頁即叫醒後端
+app.init(); app.resume();
+</script>
+</body>
+</html>
